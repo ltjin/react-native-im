@@ -8,12 +8,16 @@
 
 #import "RCTIMModule.h"
 #import "NIMSDK.h"
+#import "NIMAVChat.h"
 #import "RCTLog.h"
+#import "RCTEventDispatcher.h"
 
-@interface RCTIMModule()<NIMLoginManagerDelegate>
+@interface RCTIMModule()<NIMLoginManagerDelegate, NIMNetCallManagerDelegate>
 @end
 
 @implementation RCTIMModule
+
+@synthesize bridge = _bridge;
 
 RCT_EXPORT_MODULE();
 
@@ -26,12 +30,13 @@ RCT_EXPORT_METHOD(login:(NSDictionary *)acc appKey:(NSString *)appKey)
         //初始化
         [[NIMSDK sharedSDK] registerWithAppID:appKey cerName:nil];
         [[[NIMSDK sharedSDK] loginManager] addDelegate:self];
+        [[NIMSDK sharedSDK].netCallManager addDelegate:self];
         
         //登录
         NIMAutoLoginData *loginData = [[NIMAutoLoginData alloc] init];
         loginData.account = [acc objectForKey:@"accId"];
         loginData.token = [acc objectForKey:@"accToken"];
-        RCTLogInfo(@"用户登录信息－用户名：%@, 密码：%@", loginData.account, loginData.token);
+        NSLog(@"用户登录信息－用户名：%@, 密码：%@", loginData.account, loginData.token);
         loginData.forcedMode = YES;
         [[[NIMSDK sharedSDK] loginManager] autoLogin:loginData];
     });
@@ -40,11 +45,18 @@ RCT_EXPORT_METHOD(login:(NSDictionary *)acc appKey:(NSString *)appKey)
 #pragma mark - NIMLoginManagerDelegate
 -(void)onLogin:(NIMLoginStep)step
 {
-    RCTLogInfo(@"登录回调－%d", step);
+    NSLog(@"登录回调－%d", step);
 }
 -(void)onAutoLoginFailed:(NSError *)error
 {
-    RCTLogInfo(@"登录失败－%@", error);
+    NSLog(@"登录失败－%@", error);
+}
+
+#pragma mark - NIMLoginManagerDelegate
+-(void)onReceive:(UInt64)callID from:(NSString *)caller type:(NIMNetCallType)type message:(NSString *)extendMessage
+{
+    NSLog(@"收到通话邀请－%d", callID);
+    [self.bridge.eventDispatcher sendAppEventWithName:@"onReceive" body:@{@"callId": [NSString stringWithFormat:@"%ld", callID]}];
 }
 
 @end

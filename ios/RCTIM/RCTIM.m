@@ -11,6 +11,7 @@
 #import "NIMAVChat.h"
 #import "NTESGLView.h"
 #import "RCTLog.h"
+#import "RCTEventDispatcher.h"
 
 #define NTESUseGLView
 
@@ -49,8 +50,10 @@
 
 -(void)dealloc
 {
+    [self hangup:_callId];
     [[NIMSDK sharedSDK].netCallManager removeDelegate:self];
-
+    [UIApplication sharedApplication].idleTimerDisabled = NO;
+    
 }
 
 //呼叫信息
@@ -65,8 +68,13 @@
     NSString *currentAcc = [[[NIMSDK sharedSDK] loginManager] currentAccount];
     NSString *fromAcc = [callInfo objectForKey:@"from"];
     NSString *toAcc = [callInfo objectForKey:@"to"];
+    NSString *callId = [callInfo objectForKey:@"callId"];
+    if(callId){
+        _callId = [callId integerValue];
+        NSLog(@"邀请－%d", _callId);
+    }
     
-    RCTLogInfo(@"当前登录用户：%@， 主叫用户：%@, 被叫用户：%@", currentAcc, fromAcc, toAcc);
+    NSLog(@"当前登录用户：%@， 主叫用户：%@, 被叫用户：%@", currentAcc, fromAcc, toAcc);
     //主叫发起通话
     if([currentAcc isEqualToString:fromAcc]){
         [self startCall:toAcc];
@@ -80,6 +88,7 @@
     NSArray *callees = [NSArray arrayWithObjects:callee, nil];
     
     [[NIMSDK sharedSDK].netCallManager start:callees type:NIMNetCallTypeVideo option:nil completion:^(NSError *error, UInt64 callID) {
+        NSLog(@"发起通话－error: %@, callID: %d", error, callID);
         if (!error) {
             _callId = callID;
             //十秒之后如果还是没有收到对方响应的control字段，则自己发起一个假的control，用来激活铃声并自己先进入房间
@@ -89,10 +98,10 @@
             });
         }else{
             if (error) {
-                RCTLogInfo(@"发起通话失败－%@", error);
+                NSLog(@"发起通话失败－%@", error);
             }else{
                 //说明在start的过程中把页面关了。。
-                [[NIMSDK sharedSDK].netCallManager hangup:callID];
+                [self hangup:callID];
             }
         }
     }];
@@ -103,13 +112,10 @@
 {
     _control = control;
     if([_control isEqualToString:@"refuse"]){
-        NSLog(@"拒绝通话");
         [self response:_callId accept:NO];
     }else if([_control isEqualToString:@"accept"]){
-        NSLog(@"接受通话");
         [self response:_callId accept:YES];
     }else if([_control isEqualToString:@"hangup"]){
-        NSLog(@"挂断通话");
         [self hangup:_callId];
     }
 }
@@ -117,12 +123,18 @@
 //挂断电话
 -(void)hangup:(UInt64 *)callId
 {
+    NSLog(@"挂断通话: %d", callId);
     [[NIMSDK sharedSDK].netCallManager hangup:callId];
 }
 
 //是否接受
 -(void)response:(UInt64 *)callId accept:(BOOL)accept
 {
+    if(accept){
+        NSLog(@"接受通话: %d", callId);
+    }else{
+        NSLog(@"拒绝通话: %d", callId);
+    }
     [[NIMSDK sharedSDK].netCallManager response:callId accept:accept option:nil completion:^(NSError * _Nullable error, UInt64 callID) {
         NSString *log = [NSString stringWithFormat:@"同意通话回调: %@", error];
         NSLog(@"Log:%@", log);
@@ -145,6 +157,12 @@
     
 }
 
+//挂断回调
+-(void)onHangup:(UInt64)callID by:(NSString *)user
+{
+    
+}
+
 - (void)initRemoteGLView {
     _remoteGLView = [[NTESGLView alloc] initWithFrame:self.bounds];
     [_remoteGLView setContentMode:UIViewContentModeScaleAspectFit];
@@ -163,7 +181,9 @@
     if (!_remoteGLView) {
         [self initRemoteGLView];
         [self changeLocalPreview];
+        [UIApplication sharedApplication].idleTimerDisabled = YES;
     }
+    
     [_remoteGLView render:yuvData width:width height:height];
 }
 #else
@@ -205,10 +225,10 @@
 - (void)onControl:(UInt64)callID
              from:(NSString *)user
              type:(NIMNetCallControlType)control;{
-    NSLog(@"Log: 回调回调回调>>>>>>>%d", control);
+    NSLog(@"Log: 控制回调>>>>>>> %d", control);
     switch (control) {
         case NIMNetCallControlTypeFeedabck:{
-            [[NIMSDK sharedSDK].netCallManager hangup:callID];
+            [self hangup:callID];
             break;
         }
         case NIMNetCallControlTypeBusyLine: {
