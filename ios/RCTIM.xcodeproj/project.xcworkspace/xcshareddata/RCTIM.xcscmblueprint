@@ -1,0 +1,25 @@
+{
+  "DVTSourceControlWorkspaceBlueprintPrimaryRemoteRepositoryKey" : "7e54d0e0-5dac-7d42-913c-b7ab07022c85++5730",
+  "DVTSourceControlWorkspaceBlueprintWorkingCopyRepositoryLocationsKey" : {
+    "7e54d0e0-5dac-7d42-913c-b7ab07022c85++5730" : {
+
+    }
+  },
+  "DVTSourceControlWorkspaceBlueprintWorkingCopyStatesKey" : {
+    "7e54d0e0-5dac-7d42-913c-b7ab07022c85++5730" : 9223372036854775807
+  },
+  "DVTSourceControlWorkspaceBlueprintIdentifierKey" : "37F36697-7C0E-4AF9-A8F7-3A1149A55A11",
+  "DVTSourceControlWorkspaceBlueprintWorkingCopyPathsKey" : {
+    "7e54d0e0-5dac-7d42-913c-b7ab07022c85++5730" : "YYShow\/"
+  },
+  "DVTSourceControlWorkspaceBlueprintNameKey" : "RCTIM",
+  "DVTSourceControlWorkspaceBlueprintVersion" : 204,
+  "DVTSourceControlWorkspaceBlueprintRelativePathToProjectKey" : "99_Reference\/RCTIM\/RCTIM.xcodeproj",
+  "DVTSourceControlWorkspaceBlueprintRemoteRepositoriesKey" : [
+    {
+      "DVTSourceControlWorkspaceBlueprintRemoteRepositoryURLKey" : "http:\/\/192.168.1.4\/svn\/yygj",
+      "DVTSourceControlWorkspaceBlueprintRemoteRepositorySystemKey" : "com.apple.dt.Xcode.sourcecontrol.Subversion",
+      "DVTSourceControlWorkspaceBlueprintRemoteRepositoryIdentifierKey" : "7e54d0e0-5dac-7d42-913c-b7ab07022c85++5730"
+    }
+  ]
+}
