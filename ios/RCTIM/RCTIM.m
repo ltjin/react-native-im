@@ -10,8 +10,7 @@
 #import "NIMSDK.h"
 #import "NIMAVChat.h"
 #import "NTESGLView.h"
-#import "RCTLog.h"
-#import "RCTEventDispatcher.h"
+#import <AVFoundation/AVFoundation.h>
 
 #define NTESUseGLView
 
@@ -20,7 +19,7 @@
 //激活铃声后无人接听的超时时间
 #define NoBodyResponseTimeOut 40
 
-@interface RCTIM()<NIMNetCallManagerDelegate>
+@interface RCTIM()<NIMNetCallManagerDelegate, AVAudioPlayerDelegate>
 
 @property (nonatomic,assign) NIMNetCallCamera cameraType;
 
@@ -38,10 +37,13 @@
 
 @implementation RCTIM
 
+
+
 - (instancetype)init
 {
     if(self = [super init]){
         //添加通话委托
+        NSLog(@"初始化.......");
         [[NIMSDK sharedSDK].netCallManager addDelegate:self];
     }
     
@@ -51,9 +53,9 @@
 -(void)dealloc
 {
     [self hangup:_callId];
+    [self.player stop];
     [[NIMSDK sharedSDK].netCallManager removeDelegate:self];
     [UIApplication sharedApplication].idleTimerDisabled = NO;
-    
 }
 
 //呼叫信息
@@ -78,6 +80,9 @@
     //主叫发起通话
     if([currentAcc isEqualToString:fromAcc]){
         [self startCall:toAcc];
+    }else{
+        //被叫收到通话邀请播放铃声
+        [self playReceiverRing];
     }
 }
 
@@ -87,13 +92,14 @@
     
     NSArray *callees = [NSArray arrayWithObjects:callee, nil];
     
+    [self playConnnetRing];
     [[NIMSDK sharedSDK].netCallManager start:callees type:NIMNetCallTypeVideo option:nil completion:^(NSError *error, UInt64 callID) {
         NSLog(@"发起通话－error: %@, callID: %d", error, callID);
         if (!error) {
             _callId = callID;
             //十秒之后如果还是没有收到对方响应的control字段，则自己发起一个假的control，用来激活铃声并自己先进入房间
             NSTimeInterval delayTime = DelaySelfStartControlTime;
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delayTime * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                 [self onControl:callID from:callee type:NIMNetCallControlTypeFeedabck];
             });
         }else{
@@ -101,7 +107,7 @@
                 NSLog(@"发起通话失败－%@", error);
             }else{
                 //说明在start的过程中把页面关了。。
-                [self hangup:callID];
+                [[NIMSDK sharedSDK].netCallManager hangup:callID];
             }
         }
     }];
@@ -111,6 +117,7 @@
 -(void)setControl:(NSString *)control
 {
     _control = control;
+    [self.player stop];
     if([_control isEqualToString:@"refuse"]){
         [self response:_callId accept:NO];
     }else if([_control isEqualToString:@"accept"]){
@@ -136,6 +143,7 @@
         NSLog(@"拒绝通话: %d", callId);
     }
     [[NIMSDK sharedSDK].netCallManager response:callId accept:accept option:nil completion:^(NSError * _Nullable error, UInt64 callID) {
+        [self.player stop];
         NSString *log = [NSString stringWithFormat:@"同意通话回调: %@", error];
         NSLog(@"Log:%@", log);
     }];
@@ -147,9 +155,11 @@
     switch (status) {
         case NIMNetCallStatusConnect:
             NSLog(@"Log:通话状态>>>>>>>>>>>> 已连接");
+            self.onConnected(@{@"status": @YES});
             break;
         case NIMNetCallStatusDisconnect:
             NSLog(@"Log:通话状态>>>>>>>>>>>> 已断开");
+            self.onConnected(@{@"status": @NO});
             break;
         default:
             break;
@@ -157,10 +167,22 @@
     
 }
 
-//挂断回调
+-(void)onResponse:(UInt64)callID from:(NSString *)callee accepted:(BOOL)accepted
+{
+    if (!accepted) {
+        [self playHangUpRing];
+    }else{
+        [self.player stop];
+    }
+    NSString *log = [NSString stringWithFormat:@"%@", accepted ? @"同意":@"拒绝"];
+    NSLog(@"Log:是否同意通话回调>>>>>>>>>>>> %@", log);
+    self.onConnected(@{@"status": accepted ? @YES : @NO, @"type": @"refuse"});
+}
+
 -(void)onHangup:(UInt64)callID by:(NSString *)user
 {
-    
+    NSLog(@"%@：挂断了电话", user);
+    self.onHangUp(@{@"callID": [NSString stringWithFormat:@"%ld", callID], @"user":user});
 }
 
 - (void)initRemoteGLView {
@@ -183,7 +205,6 @@
         [self changeLocalPreview];
         [UIApplication sharedApplication].idleTimerDisabled = YES;
     }
-    
     [_remoteGLView render:yuvData width:width height:height];
 }
 #else
@@ -218,7 +239,7 @@
 {
     if(_localVideoLayer){
         _localVideoLayer.zPosition = 1;
-        _localVideoLayer.frame = CGRectMake(10, 30, 100, 150);
+        _localVideoLayer.frame = CGRectMake(10, 30, 130, 200);
     }
 }
 
@@ -228,10 +249,19 @@
     NSLog(@"Log: 控制回调>>>>>>> %d", control);
     switch (control) {
         case NIMNetCallControlTypeFeedabck:{
-            [self hangup:callID];
+            [self playSenderRing];
+            NSTimeInterval delayTime = NoBodyResponseTimeOut;
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delayTime * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                [self playTimeoutRing];
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    [self hangup:callID];
+                    self.onHangUp(@{@"callID": [NSString stringWithFormat:@"%ld", callID], @"user":user});
+                });
+            });
             break;
         }
         case NIMNetCallControlTypeBusyLine: {
+            [self playOnCallRing];
             break;
         }
         case NIMNetCallControlTypeStartLocalRecord:
@@ -243,4 +273,68 @@
     }
 }
 
+#pragma mark - Ring
+//铃声 - 正在呼叫请稍后
+- (void)playConnnetRing{
+    NSLog(@"正在呼叫请稍后！！！");
+    [self.player stop];
+    NSURL *url = [[NSBundle mainBundle] URLForResource:@"video_connect_chat_tip_sender" withExtension:@"aac"];
+    self.player = [[AVAudioPlayer alloc] initWithContentsOfURL:url error:nil];
+    [self.player play];
+}
+
+//铃声 - 对方暂时无法接听
+- (void)playHangUpRing{
+    NSLog(@"对方暂时无法接听！！！");
+    [self.player stop];
+    NSURL *url = [[NSBundle mainBundle] URLForResource:@"video_chat_tip_HangUp" withExtension:@"aac"];
+    self.player = [[AVAudioPlayer alloc] initWithContentsOfURL:url error:nil];
+    [self.player play];
+}
+
+//铃声 - 对方正在通话中
+- (void)playOnCallRing{
+    NSLog(@"对方正在通话中！！！");
+    [self.player stop];
+    NSURL *url = [[NSBundle mainBundle] URLForResource:@"video_chat_tip_OnCall" withExtension:@"aac"];
+    self.player = [[AVAudioPlayer alloc] initWithContentsOfURL:url error:nil];
+    [self.player play];
+}
+
+//铃声 - 对方无人接听
+- (void)playTimeoutRing{
+    NSLog(@"对方无人接听！！！");
+    [self.player stop];
+    NSURL *url = [[NSBundle mainBundle] URLForResource:@"video_chat_tip_onTimer" withExtension:@"aac"];
+    self.player = [[AVAudioPlayer alloc] initWithContentsOfURL:url error:nil];
+    [self.player play];
+}
+
+//铃声 - 接收方铃声
+- (void)playReceiverRing{
+    NSLog(@"接收方铃声！！！");
+    [self.player stop];
+    NSURL *url = [[NSBundle mainBundle] URLForResource:@"video_chat_tip_receiver" withExtension:@"aac"];
+    self.player = [[AVAudioPlayer alloc] initWithContentsOfURL:url error:nil];
+    self.player.numberOfLoops = 20;
+    [self.player play];
+}
+
+//铃声 - 拨打方铃声
+- (void)playSenderRing{
+    [self.player stop];
+    NSLog(@"拨打方铃声！！！");
+    NSURL *url = [[NSBundle mainBundle] URLForResource:@"video_chat_tip_sender" withExtension:@"aac"];
+    self.player = [[AVAudioPlayer alloc] initWithContentsOfURL:url error:nil];
+    self.player.numberOfLoops = 20;
+    [self.player play];
+}
+
+-(void)audioPlayerDecodeErrorDidOccur:(AVAudioPlayer *)player error:(NSError *)error{
+    NSLog(@"播放铃声出错。。。。。%@", error);
+}
+-(void)audioPlayerDidFinishPlaying:(AVAudioPlayer *)player successfully:(BOOL)flag
+{
+    NSLog(@"播放铃声结果。。。。。%@", flag?@"成功":@"失败");
+}
 @end

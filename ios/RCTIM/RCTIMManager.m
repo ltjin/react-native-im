@@ -20,5 +20,7 @@ RCT_EXPORT_MODULE()
 
 RCT_EXPORT_VIEW_PROPERTY(callInfo, NSDictionary);
 RCT_EXPORT_VIEW_PROPERTY(control, NSString);
+RCT_EXPORT_VIEW_PROPERTY(onHangUp, RCTBubblingEventBlock);
+RCT_EXPORT_VIEW_PROPERTY(onConnected, RCTBubblingEventBlock);
 
 @end

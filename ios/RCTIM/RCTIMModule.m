@@ -51,6 +51,12 @@ RCT_EXPORT_METHOD(login:(NSDictionary *)acc appKey:(NSString *)appKey)
 {
     NSLog(@"登录失败－%@", error);
 }
+-(void)onKick:(NIMKickReason)code clientType:(NIMLoginClientType)clientType
+{
+    NSString *log = [NSString stringWithFormat:@"您被踢下线了：%d---%d", code, clientType];
+    NSLog(@"%@", log);
+    [self.bridge.eventDispatcher sendAppEventWithName:@"onKick" body:@{@"code": [NSString stringWithFormat:@"%d", code], @"clientType":[NSString stringWithFormat:@"%d", clientType]}];
+}
 
 #pragma mark - NIMLoginManagerDelegate
 -(void)onReceive:(UInt64)callID from:(NSString *)caller type:(NIMNetCallType)type message:(NSString *)extendMessage
